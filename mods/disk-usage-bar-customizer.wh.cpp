@@ -36,29 +36,29 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 
 ## Screenshots
 ### Colors adapting to the system's theme
-![System colors light mode](https://i.imgur.com/LWSfmeF.png)
+![System colors light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_default.png)
 
-![System colors dark mode](https://i.imgur.com/JU3PKjD.png)
+![System colors dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_default.png)
 
 ### Accent color as the normal progress color
-![Accent color light mode](https://i.imgur.com/YjZaaij.png)
+![Accent color light mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/light_mode_accent.png)
 
-![Accent color dark mode](https://i.imgur.com/3oxqdh6.png)
+![Accent color dark mode](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/dark_mode_accent.png)
 
 ### Custom colors
-![Custom colors](https://i.imgur.com/dD6Pa1h.png)
+![Custom colors](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors.png)
 
 ### No border
-![No border](https://i.imgur.com/nFQZQxL.png)
+![No border](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_colors_no_border.png)
 
 ### Custom height
-![Custom height](https://i.imgur.com/wUAUAcu.png)
+![Custom height](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_height.png)
 
 ### Custom warning threshold
-![Custom warning threshold](https://i.imgur.com/453a2Hs.png)
+![Custom warning threshold](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/custom_warning_threshold.png)
 
 ### Show remaining space as progress instead of used space
-![Show remaining space as progress instead of used space](https://i.imgur.com/t53p6Jb.png)
+![Show remaining space as progress instead of used space](https://raw.githubusercontent.com/Valer100/my-windhawk-mods/refs/heads/main/disk-usage-bar-customizer/screenshots/remaining_space_as_progress.png)
 */
 // ==/WindhawkModReadme==
 
@@ -303,6 +303,16 @@ static COLORREF GetSystemAccentColorShade(int shade) {
 HRESULT WINAPI HookedDrawThemeBackground(
     HTHEME hTheme, HDC hdc, INT iPartId, INT iStateId, LPCRECT pRect, LPCRECT pClipRect
 ) {
+    // I know the rect left point and shell32 caller checks are some really 
+    // weird checks, but I have no idea for a better check that actually works 
+    // and that can actually distinguish from Explorer's progress bar drawing 
+    // inside an item from This PC's drive list and an actual progress bar 
+    // control drawing. From my inspection, Explorer seems to custom draw a 
+    // progress bar like this only inside the drive list from the This PC section.
+
+    if ((iPartId != 5 && iPartId != 11) || !pRect || pRect->left <= 0)
+        return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
+
     WCHAR themeClass[256] = {};
 
     BOOL isThemeClassValid = (
@@ -310,16 +320,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
         && wcscmp(themeClass, L"Progress") == 0
     );
 
-    BOOL isRectValid = pRect && pRect->left > 0;
-
-    // I know `isRectValid` and `isCallerShell32` are some really weird checks,
-    // but I have no idea for a better check that actually works and that can 
-    // actually distinguish from Explorer's progress bar drawing inside an item
-    // from This PC's drive list and an actual progress bar control drawing. 
-    // From my inspection, Explorer seems to custom draw a progress bar like 
-    // this only inside the drive list from the This PC section.
-
-    if (isRectValid && isThemeClassValid) {
+    if (isThemeClassValid) {
         HMODULE callerModule = nullptr;
         void* caller = __builtin_return_address(0);
 
@@ -420,9 +421,15 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
 
 static BOOL CALLBACK RefreshExplorerCallback(HWND hwnd, LPARAM lParam) {
+    DWORD pid;
     WCHAR windowClass[256];
 
-    if (GetClassName(hwnd, windowClass, 256) && wcscmp(windowClass, L"CabinetWClass") == 0)
+    GetWindowThreadProcessId(hwnd, &pid); 
+
+    if (
+        pid == GetCurrentProcessId() && GetClassName(hwnd, windowClass, 256) 
+        && wcscmp(windowClass, L"CabinetWClass") == 0
+    )
         SendMessage(hwnd, WM_SETTINGCHANGE, SPI_SETHIGHCONTRAST, 0);
     
     return TRUE;
